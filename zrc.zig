@@ -36,7 +36,7 @@ pub fn Rc(comptime T: type) type {
         }
 
         pub fn deinit(self: *Self) void {
-            _ = self.refs.xchg(0);
+            self.refs.set(0);
             self.allocator.destroy(self.ptr.?);
             self.ptr = null;
         }
@@ -50,7 +50,7 @@ pub fn Rc(comptime T: type) type {
 }
 
 
-test "Test Rc all functions" {
+test "Rc all functions" {
     var da = std.heap.DirectAllocator.init();
     defer da.deinit();
     var all = &da.allocator;
@@ -96,5 +96,30 @@ test "Threaded Rc" {
     defer da.deinit();
     var all = &da.allocator;
 
-    
+    var context = try Rc(Ctx).init(all);
+    context.ptr.?.val = 5;
+
+    var threads: [10]*std.os.Thread = undefined;
+    for (threads) |*t| {
+        t.* = try std.os.spawnThread(context.incRef(), worker);
+    }
+
+    context.decRef();
+
+    for (threads) |t|
+        t.wait();
+
+    assert(context.ptr == null);
 }
+
+const Ctx = struct {
+    val: u32,
+};
+
+fn worker(ctx: *Rc(Ctx)) void {
+    defer ctx.decRef();
+    if (ctx.ptr.?.val != 5){
+        @panic("Nope");
+    }
+}
+
