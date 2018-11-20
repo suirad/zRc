@@ -19,10 +19,11 @@ pub fn Rc(comptime T: type) type {
             };
         }
 
-        pub fn incRef(self: *Self) void {
+        pub fn incRef(self: *Self) *Self {
             if (self.ptr != null) {
                 _ = self.refs.incr();
             }
+            return self;
         }
 
         pub fn decRef(self: *Self) void {
@@ -36,7 +37,7 @@ pub fn Rc(comptime T: type) type {
 
         pub fn deinit(self: *Self) void {
             _ = self.refs.xchg(0);
-            self.allocator.destroy(self.ptr);
+            self.allocator.destroy(self.ptr.?);
             self.ptr = null;
         }
 
@@ -49,17 +50,16 @@ pub fn Rc(comptime T: type) type {
 }
 
 
-test "Test Rc" {
+test "Test Rc all functions" {
     var da = std.heap.DirectAllocator.init();
     defer da.deinit();
     var all = &da.allocator;
-    //var all = std.heap.c_allocator;
 
     var rcint = try Rc(i32).init(all);   
     assert(rcint.ptr != null);
 
     // reference adjustments
-    rcint.incRef();
+    _ = rcint.incRef();
     assert(rcint.countRef() == 2);
     rcint.decRef();
 
@@ -70,4 +70,31 @@ test "Test Rc" {
     // auto free
     rcint.decRef();
     assert(rcint.ptr == null);
+}
+
+test "Rc auto-free" {
+    var da = std.heap.DirectAllocator.init();
+    defer da.deinit();
+    var all = &da.allocator;
+
+    var rcint = try Rc(u32).init(all);
+    assert(rcint.ptr != null);
+
+    rcint.ptr.?.* = 1;
+
+    assert(freefn(&rcint) == 1);
+    assert(rcint.ptr == null);
+}
+
+fn freefn(data: *Rc(u32)) u32 {
+    defer data.decRef();
+    return data.ptr.?.*;
+}
+
+test "Threaded Rc" {
+    var da = std.heap.DirectAllocator.init();
+    defer da.deinit();
+    var all = &da.allocator;
+
+    
 }
